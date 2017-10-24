@@ -8,7 +8,7 @@ from rdflib import Graph, Namespace, URIRef, Literal, XSD
 from uuid import uuid4 # Random UUIDs for statement nodes
 from hashlib import sha1 # SHA-1 hashes for reference nodes
 from urllib.parse import urlparse
-from sys import exit, argv
+from sys import exit
 
 
 SHA = sha1()
