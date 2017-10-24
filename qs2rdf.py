@@ -2,9 +2,11 @@
 # -*- encoding: utf-8 -*-
 
 import logging
-from rdflib import Graph, Namespace, URIRef, Literal
+import re
+from rdflib import Graph, Namespace, URIRef, Literal, XSD
 from uuid import uuid4 # Random UUIDs for statement nodes
 from hashlib import sha1 # SHA-1 hashes for reference nodes
+from urllib.parse import urlparse
 from sys import exit, argv
 
 
@@ -21,6 +23,14 @@ PROV = Namespace('http://www.w3.org/ns/prov#')
 GEO = Namespace('http://www.opengis.net/ont/geosparql#')
 
 SHA = sha1()
+
+# Value data types matchers
+ITEM = re.compile(r'^Q\d+$')
+PROPERTY = re.compile(r'^P\d+$')
+TIME = re.compile(r'^[+-]\d+-\d\d-\d\dT\d\d:\d\d:\d\dZ\/\d+$')
+LOCATION = re.compile(r'^@([+\-]?\d+(?:.\d+)?)\/([+\-]?\d+(?:.\d+))?$')
+QUANTITY = re.compile(r'^[+-]\d+(\.\d+)?$')
+MONOLINGUAL_TEXT = re.compile(r'^(\w+):("[^"\\]*(?:\\.[^"\\]*)*")$')
 
 
 def setup_logger(level='debug', log_filename='conversion.log'):
@@ -64,20 +74,17 @@ def convert(fin, fout='out.ttl'):
     setup_prefixes(g)
     with open(fin) as i:
         for statement in i:
-            logger.debug(statement)
             elements = statement.strip().split('\t')
+            logger.debug(elements)
             subject = elements[0]
             main_pid = elements[1]
-            value = elements[2]
-            # TODO handle value
-            value = Literal(value)
+            value = handle_value(elements[2])
             st_node = mint_statement_node(subject)
             g.add((URIRef(WD + subject), URIRef(P + main_pid), st_node))
             g.add((st_node, URIRef(PS + main_pid), value))
             quals_and_refs = zip(*[iter(elements[3:])] * 2)
             for (prop, val) in quals_and_refs:
-                # TODO handle value
-                val = Literal(val)
+                val = handle_value(val)
                 if prop.startswith('S'):
                     ref_node = mint_reference_node(val)
                     g.add((st_node, PROV.wasDerivedFrom, ref_node))
@@ -88,6 +95,63 @@ def convert(fin, fout='out.ttl'):
         # TODO rdlifb seems to randomly ignore some prefixes
         g.serialize(destination=fout, format='turtle')
     return
+
+
+def handle_value(value):
+    """
+    Handle value data types.
+    See https://www.wikidata.org/wiki/Help:QuickStatements#Command_sequence_syntax
+    """
+    # Item
+    if ITEM.match(value):
+        item = URIRef(WD + value)
+        logger.debug('Item. From [%s] to [%s]' % (value, item.n3()))
+        return item
+    # monolingual text
+    elif MONOLINGUAL_TEXT.match(value):
+        match = MONOLINGUAL_TEXT.match(value)
+        literal = Literal(match.group(2).strip('"'), lang=match.group(1))
+        logger.debug('Monolingual text. From [%s] to [%s]' % (value, literal.n3()))
+        return literal
+    # time YYYY-MM-DDThh:mm:ssZ
+    elif TIME.match(value):
+        # TODO handle precision via a complex RDF value
+        time, precision = value.split('/')
+        # Ensure compatibility with the old format, like
+        # +00000000931-01-01T00:00:00Z/9
+        year, rest = time[1:].split('-', 1)
+        # Years have always 4 digits
+        year = '%04d' % int(year)
+        time = Literal(time[0] + year + '-' + rest, datatype=XSD.dateTime)
+        logger.debug('Time. From [%s] to [%s]' % (value, time.n3()))
+        return time
+    # location
+    elif LOCATION.match(value):
+        match = LOCATION.match(value)
+        lat = match.group(1)
+        lon = match.group(2)
+        # Point(12.482777777778 41.893055555556)
+        point = Literal('Point(%s %s)' % (lon, lat), datatype=GEO.wktLiteral)
+        logger.debug('Location. From [%s] to [%s]' (value, point.n3()))
+        return point
+    # quantity
+    elif QUANTITY.match(value):
+        quantity = Literal(value, datatype=XSD.decimal)
+        logger.debug('Quantity. From [%s] to [%s]' % (value, quantity.n3()))
+        return quantity
+    else:
+        no_quotes = value.strip('"')
+        parsed = urlparse(no_quotes)
+        # URL
+        if parsed.scheme.find('http') == 0 and parsed.netloc:
+            url = URIRef(no_quotes)
+            logger.debug('URL. From [%s] to [%s]' % (value, url.n3()))
+            return url
+        # Plain string
+        else:
+            plain_literal = Literal(no_quotes)
+            logger.debug('Plain literal. From [%s] to [%s]' % (value, plain_literal.n3()))
+            return plain_literal
 
 
 def mint_statement_node(statement_subject):
