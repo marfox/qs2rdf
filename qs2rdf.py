@@ -98,9 +98,9 @@ def convert(fin, fout, logger):
             if prop.startswith('S'):
                 ref_node = mint_reference_node(val)
                 g.add((st_node, PROV.wasDerivedFrom, ref_node))
-                g.add((ref_node, PR.prop, val))
+                g.add((ref_node, URIRef(PR + prop), val))
             else:
-                g.add((st_node, PQ.prop, val))
+                g.add((st_node, URIRef(PQ + prop), val))
     # TODO rdlifb seems to randomly ignore some prefixes
     g.serialize(destination=fout, format='turtle')
     return
@@ -187,3 +187,4 @@ def main(dataset, output, debug, logfile):
 
 if __name__ == '__main__':
     exit(main())
+
