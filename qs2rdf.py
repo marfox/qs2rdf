@@ -73,13 +73,21 @@ def convert(fin, fout, logger):
     for statement in fin:
         statement = statement.strip()
         elements = statement.split('\t')
-        logger.debug(elements)
+        logger.debug('Parsed statement: %s' % elements)
         # A minimal statement is a triple
         if len(elements) < 3:
-            logger.warn("Skipped malformed statement: '%s'" % statement)
+            logger.warn("Bad parsing. Skipping malformed statement: '%s'" % statement)
             continue
         subject = elements[0]
         main_pid = elements[1]
+        # The subject must be a QID
+        if not ITEM.match(subject):
+            logger.warn("Subject is not a QID: [%s] Skipping malformed statement: '%s" % (subject, statement))
+            continue
+        # The main property must be a PID
+        if not PROPERTY.match(main_pid):
+            logger.warn("Main property is not a PID: [%s]. Skipping malformed statement: '%s'" % (main_pid, statement))
+            continue
         value = handle_value(elements[2], logger)
         st_node = mint_statement_node(subject)
         g.add((URIRef(WD + subject), URIRef(P + main_pid), st_node))
