@@ -71,8 +71,13 @@ def convert(fin, fout, logger):
     g = Graph()
     setup_prefixes(g)
     for statement in fin:
-        elements = statement.strip().split('\t')
+        statement = statement.strip()
+        elements = statement.split('\t')
         logger.debug(elements)
+        # A minimal statement is a triple
+        if len(elements) < 3:
+            logger.warn("Skipped malformed statement: '%s'" % statement)
+            continue
         subject = elements[0]
         main_pid = elements[1]
         value = handle_value(elements[2], logger)
