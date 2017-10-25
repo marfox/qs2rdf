@@ -40,15 +40,15 @@ def setup_logger(level, log_filename):
     logger = logging.getLogger(__name__)
     logger.setLevel(levels[level])
     logFormatter = logging.Formatter("%(asctime)s [%(levelname)s] %(module)s.%(funcName)s #%(lineno)d - %(message)s")
-    # Always log to console
-    consoleHandler = logging.StreamHandler()
-    consoleHandler.setFormatter(logFormatter)
-    logger.addHandler(consoleHandler)
-    # Log to file if given
+    # Log to file if given, otherwise to console
     if log_filename:
         fileHandler = logging.FileHandler(log_filename)
         fileHandler.setFormatter(logFormatter)
         logger.addHandler(fileHandler)
+    else:
+        consoleHandler = logging.StreamHandler()
+        consoleHandler.setFormatter(logFormatter)
+        logger.addHandler(consoleHandler)
     return logger
 
 
@@ -164,8 +164,8 @@ def mint_reference_node(reference_value):
 @click.command()
 @click.argument('dataset', type=click.File())
 @click.option('--output', '-o', type=click.Path(dir_okay=False), default='output.ttl')
+@click.option('--logfile', '-l', type=click.Path(dir_okay=False), default=None)
 @click.option('--debug', '-d', is_flag=True, default=False)
-@click.option('--logfile', '-l', type=click.File('w'), default=None)
 def main(dataset, output, debug, logfile):
     logger = setup_logger('debug', logfile) if debug else setup_logger('info', logfile)
     convert(dataset, output, logger)
