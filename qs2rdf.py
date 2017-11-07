@@ -89,16 +89,18 @@ def convert(fin, fout, logger):
             logger.warn("Main property is not a PID: [%s]. Skipping malformed statement: '%s'" % (main_pid, statement))
             continue
         value = handle_value(elements[2], logger)
+        if not value: continue
         st_node = mint_statement_node(subject)
         g.add((URIRef(WD + subject), URIRef(P + main_pid), st_node))
         g.add((st_node, URIRef(PS + main_pid), value))
         quals_and_refs = zip(*[iter(elements[3:])] * 2)
         for (prop, val) in quals_and_refs:
             val = handle_value(val, logger)
+            if not val: continue
             if prop.startswith('S'):
                 ref_node = mint_reference_node(val)
                 g.add((st_node, PROV.wasDerivedFrom, ref_node))
-                g.add((ref_node, URIRef(PR + prop), val))
+                g.add((ref_node, URIRef(PR + prop.replace('S', 'P')), val))
             else:
                 g.add((st_node, URIRef(PQ + prop), val))
     # TODO rdlifb seems to randomly ignore some prefixes
@@ -126,12 +128,18 @@ def handle_value(value, logger):
     elif TIME.match(value):
         # TODO handle precision via a complex RDF value
         time, precision = value.split('/')
+        # Don't add '+', not supported by xsd:dateTime
+        bc = '-' if time[0] == '-' else ''
         # Ensure compatibility with the old format, like
         # +00000000931-01-01T00:00:00Z/9
         year, rest = time[1:].split('-', 1)
         # Years have always 4 digits
         year = '%04d' % int(year)
-        time = Literal(time[0] + year + '-' + rest, datatype=XSD.dateTime)
+        # Years can't be '0000'
+        if year == '0000':
+            logger.warn("Skipping invalid time. The year can't be '0000'. From [%s]" % value)
+            return None
+        time = Literal(bc + year + '-' + rest, datatype=XSD.dateTime)
         logger.debug('Time. From [%s] to [%s]' % (value, time.n3()))
         return time
     # Location
