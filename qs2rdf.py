@@ -94,15 +94,27 @@ def convert(fin, fout, logger):
         g.add((URIRef(WD + subject), URIRef(P + main_pid), st_node))
         g.add((st_node, URIRef(PS + main_pid), value))
         quals_and_refs = zip(*[iter(elements[3:])] * 2)
+        qualifiers = []
+        references = []
         for (prop, val) in quals_and_refs:
-            val = handle_value(val, logger)
-            if not val: continue
-            if prop.startswith('S'):
-                ref_node = mint_reference_node(val)
-                g.add((st_node, PROV.wasDerivedFrom, ref_node))
-                g.add((ref_node, URIRef(PR + prop.replace('S', 'P')), val))
-            else:
+            if prop.startswith("P"): qualifiers.append((prop, val))
+            elif prop.startswith("S"): references.append((prop, val))
+        if qualifiers:
+            for (prop, val) in qualifiers:
+                logger.debug("Qualifier: '%s %s'" % (prop, val))
+                val = handle_value(val, logger)
+                if not val: continue
                 g.add((st_node, URIRef(PQ + prop), val))
+        else: logger.info("No qualifiers found in statement '%s'" % statement)
+        if references:
+            ref_node = mint_reference_node(value)
+            g.add((st_node, PROV.wasDerivedFrom, ref_node))
+            for (prop, val) in references:
+                logger.debug("Reference: '%s %s'" % (prop, val))
+                val = handle_value(val, logger)
+                if not val: continue
+                g.add((ref_node, URIRef(PR + prop.replace('S', 'P')), val))
+        else: logger.info("No references found in statement '%s'" % statement)
     # TODO rdlifb seems to randomly ignore some prefixes
     g.serialize(destination=fout, format='turtle')
     return
